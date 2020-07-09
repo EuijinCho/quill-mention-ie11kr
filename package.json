@@ -1,11 +1,11 @@
 {
-  "name": "quill-mention-ie11kr",
+  "name": "quill-mention-ie-kr",
   "version": "0.0.1-development",
   "description": "@mentions for the Quill rich text editor",
   "main": "dist/quill.mention.csj.js",
   "module": "dist/quill.mention.esm.js",
-  "homepage": "https://github.com/EuijinCho/quill-mention-ie11kr",
-  "repository": "https://github.com/EuijinCho/quill-mention-ie11kr.git",
+  "homepage": "https://github.com/EuijinCho/quill-mention-ie-kr",
+  "repository": "https://github.com/EuijinCho/quill-mention-ie-kr.git",
   "author": "Fredrik Sundqvist <fsundqvist@gmail.com>",
   "license": "MIT",
   "files": [
