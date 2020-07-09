@@ -17,8 +17,11 @@ class Mention {
     this.cursorPos = null;
     this.values = [];
     this.suspendMouseEnter = false;
+    this.lastAutocompleteText = "";
 
     this.quill = quill;
+
+    this.isIE = !!window.MSInputMethodContext && !!document.documentMode;
 
     this.options = {
       source: null,
@@ -215,6 +218,7 @@ class Mention {
   selectItem() {
     const data = this.getItemData();
     this.options.onSelect(data, asyncData => {
+      this.lastAutocompleteText = "";
       this.insertItem(asyncData);
     });
     this.hideMentionList();
@@ -434,39 +438,47 @@ class Mention {
     return textBeforeCursorPos;
   }
 
-  onSomethingChange() {
+  onSomethingChange(ops) {
     const range = this.quill.getSelection();
     if (range == null) return;
 
     this.cursorPos = range.index;
-    const textBeforeCursor = this.getTextBeforeCursor();
+    let textBeforeCursor = this.getTextBeforeCursor() || "";
     const { mentionChar, mentionCharIndex } = getMentionCharIndex(
       textBeforeCursor,
       this.options.mentionDenotationChars
     );
 
-    if (
-      hasValidMentionCharIndex(
-        mentionCharIndex,
-        textBeforeCursor,
-        this.options.isolateCharacter
-      )
-    ) {
-      const mentionCharPos =
-        this.cursorPos - (textBeforeCursor.length - mentionCharIndex);
+    if (hasValidMentionCharIndex(mentionCharIndex, textBeforeCursor, this.options.isolateCharacter)) {
+      let isForceMoveCursor;
+      if (this.isIE && this.quill.selection.composing) {
+        const retain = (Array.isArray(ops) && ops.length > 0 && ops[0].retain) ? ops[0].retain : -9999;
+        isForceMoveCursor = retain === this.cursorPos;
+        if (isForceMoveCursor) {
+          this.cursorPos++;
+        }
+
+        textBeforeCursor = this.getTextBeforeCursor();
+      }
+
+      const mentionCharPos = this.cursorPos - (textBeforeCursor.length - mentionCharIndex);
       this.mentionCharPos = mentionCharPos;
-      const textAfter = textBeforeCursor.substring(
-        mentionCharIndex + mentionChar.length
-      );
-      if (
-        textAfter.length >= this.options.minChars &&
-        hasValidChars(textAfter, this.options.allowedChars)
-      ) {
-        this.options.source(
-          textAfter,
-          this.renderList.bind(this, mentionChar),
-          mentionChar
-        );
+      let textAfter = textBeforeCursor.substring(mentionCharIndex + mentionChar.length);
+
+      if (this.isIE) {
+        textAfter = textAfter.replace(/\s/g,"");
+      }
+
+      const isLastCharKorean = !!textAfter.slice(-1).match(/[\uac00-\ud7a3]/);
+      const isPressBackspace = this.lastAutocompleteText.length > textAfter.length;
+      this.lastAutocompleteText = textAfter;
+
+      if (this.isIE && !this.quill.selection.composing && isLastCharKorean && !isPressBackspace) {
+        return;
+      }
+
+      if (textAfter.length >= this.options.minChars && hasValidChars(textAfter, this.options.allowedChars)) {
+        this.options.source(textAfter, this.renderList.bind(this, mentionChar), mentionChar);
       } else {
         this.hideMentionList();
       }
@@ -477,7 +489,7 @@ class Mention {
 
   onTextChange(delta, oldDelta, source) {
     if (source === "user") {
-      this.onSomethingChange();
+      this.onSomethingChange(delta.ops);
     }
   }
 
