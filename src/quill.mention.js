@@ -22,6 +22,9 @@ class Mention {
     this.quill = quill;
 
     this.isIE = !!window.MSInputMethodContext && !!document.documentMode;
+    this.isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent);
+    this.iOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    this.isInsertingItem = false;
 
     this.options = {
       source: null,
@@ -219,6 +222,11 @@ class Mention {
     if (render === null) {
       return;
     }
+
+    if (this.isSafari) {
+      this.isInsertingItem = true;
+    }
+
     if (!this.options.showDenotationChar) {
       render.denotationChar = "";
     }
@@ -231,10 +239,20 @@ class Mention {
       this.quill.insertText(prevMentionCharPos + 1, " ", Quill.sources.USER);
       // setSelection here sets cursor position
       this.quill.setSelection(prevMentionCharPos + 2, Quill.sources.USER);
+    
+      if (this.iOS) {
+        this.quill.blur();
+      }
     } else {
       this.quill.setSelection(prevMentionCharPos + 1, Quill.sources.USER);
     }
     this.hideMentionList();
+
+    if (this.isSafari) {
+      setTimeout(() => {
+        this.isInsertingItem = false;
+      },100);
+    }
   }
 
   onItemMouseEnter(e) {
@@ -259,6 +277,10 @@ class Mention {
   }
 
   renderList(mentionChar, data, searchTerm, forceInsert = false, lastIndex = 0) {
+    if (this.isSafari && this.isInsertingItem) {
+      return;
+    }
+    
     if (data && data.length > 0) {
       this.values = data;
       this.mentionList.innerHTML = "";
@@ -425,7 +447,12 @@ class Mention {
 
     if (hasValidMentionCharIndex(mentionCharIndex, textBeforeCursor, this.options.isolateCharacter)) {
       let isForceMoveCursor;
-      if (this.isIE && this.quill.selection.composing) {
+
+      if (this.iOS && this.quill.selection.composing) {
+        this.cursorPos++;
+      }
+
+      if ((this.isIE || this.isSafari) && this.quill.selection.composing) {
         const retain = Array.isArray(ops) && ops.length > 0 && ops[0].retain ? ops[0].retain : -9999;
         isForceMoveCursor = retain === this.cursorPos;
         if (isForceMoveCursor) {
@@ -435,11 +462,15 @@ class Mention {
         textBeforeCursor = this.getTextBeforeCursor();
       }
 
+      if (this.isSafari && this.quill.selection.composing && Array.isArray(ops) && ops.length !== 3) {
+        return;
+      }
+
       const mentionCharPos = this.cursorPos - (textBeforeCursor.length - mentionCharIndex);
       this.mentionCharPos = mentionCharPos;
       let textAfter = textBeforeCursor.substring(mentionCharIndex + mentionChar.length);
 
-      if (this.isIE) {
+      if (this.isIE || this.isSafari) {
         textAfter = textAfter.replace(/\s/g, "");
       }
 
@@ -452,6 +483,10 @@ class Mention {
       }
 
       if (textAfter.length >= this.options.minChars && hasValidChars(textAfter, this.options.allowedChars)) {
+        if (this.isSafari && this.isInsertingItem) {
+          return;
+        }
+        
         this.options.source(textAfter, this.renderList.bind(this, mentionChar), mentionChar);
       } else {
         this.hideMentionList();
